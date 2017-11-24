@@ -193,7 +193,7 @@ Dim a As Integer
 Dim b As Integer
 Dim i As Integer, i_train_pos As Integer, i_door As Integer, h As Integer
            
-    gd_pkt_kg = Sheet1.Range("G96")
+    gd_pkt_kg = Sheet1.Range("G96")     'mass of one material block
     Hopletend4 = HopLetEndHP(2, 4)      'this is just to trick dtgraph to account for 2 hoppers
     dtgraph
     FeederHPCT
@@ -455,83 +455,129 @@ Function gi_query_color(i As Integer, j As Integer) As Long
     gi_query_color = Sheet2.Cells(j + yDisplay, i + xDisplay).Interior.Color
 End Function
 
-'NOTE: this draws down the entire hopper uniformally, ie, not hoperlets individually, this is to prevent angle of repose violations
+
+'-------------------------------------------------------------------------------
+'Function FeederHPCT
+'-------------------------------------------------------------------------------
+'DESCRIPTION:
+'	Outloading function drawing material from the hopper.
+'
+'ARGUMENTS:
+'	NONE
+'
+'NOTE: 
+'	this draws down the entire hopper uniformally, ie, not hoperlets 
+'	individually, this is to prevent angle of repose violations
 '
 Public Sub FeederHPCT()
-    Dim n As Integer, h As Integer, i_dir As Integer, k As Integer, i_bottom_layer As Integer
+    Dim n As Integer, i_hopper_number As Integer, i_feeding_direction As Integer, i_hopperlet_number As Integer, i_hopper_bot_layer_mat_count As Integer, i_hopperlet_bot_layer_mat_count As Integer
     Dim i As Integer, j As Integer
-    Dim d_outfeed As Double, d_outfeed_pkt As Double
+    Dim d_hopper_outfeed As Double, d_hopper_outfeed_pkt As Double
     
-    For h = 1 To 2          'for each of the 2 hoppers
-        gd_tot_outfeed_rate(h) = 0
+    For i_hopper_number = 1 To 2          'for each of the 2 hoppers
+        gd_tot_outfeed_rate(i_hopper_number) = 0
         'start by initialising data for this hopper
         '
-        i_dir = 3 - 2 * h   'set i_dir to +1 for the first hopper and -1 for the second
-        For k = 1 To 4
+        i_feeding_direction = 3 - 2 * i_hopper_number   'set i_feeding_direction to +1 for the first hopper and -1 for the second
+        For i_hopperlet_number = 1 To 4
             'hopperlet rates are assumed symettric from the point between the 2 dump stations
             '
-            gd_base_rates(h, k) = Sheet1.Range("G51").Offset(h, k)
-        Next k
+            gd_base_rates(i_hopper_number, i_hopperlet_number) = Sheet1.Range("G51").Offset(i_hopper_number, i_hopperlet_number)
+        Next i_hopperlet_number
         
+		
         'determine the outfeed rates for each hoperlet (r'[n] = {r[n] if s[n+1]>0; r'[n+1]+r[n] otherwise; where i+1 hoperlet is upstream)
         '
-        d_outfeed_pkt = 0
-        If i_dir > 0 Then k = 1 Else k = 4      '2nd dumpstation has hopperlet 1 upstream, 2nd dumpstation has hopperlet 4 upstream
+        d_hopper_outfeed_pkt = 0
+		
+		'SET FEEDING DIRECTION (1ST HOPPER = FORWARD, 2ND HOPPER = BACKWARD)
+        If i_feeding_direction > 0 Then i_hopperlet_number = 1 Else i_hopperlet_number = 4      '2nd dumpstation has hopperlet 1 upstream, 2nd dumpstation has hopperlet 4 upstream
         n = 4
-        While 1 <= k And k <= 4
+		
+        While 1 <= i_hopperlet_number And i_hopperlet_number <= 4
             If n = 4 Then
-                gd_max_rates(h, k) = gd_base_rates(h, k)
+                gd_max_rates(i_hopper_number, i_hopperlet_number) = gd_base_rates(i_hopper_number, i_hopperlet_number)
             Else
-                gd_max_rates(h, k) = gd_base_rates(h, k) + gd_max_rates(h, k - i_dir) - gd_outfeed_rates(h, k - i_dir) / 3.6 'account for upstream hopperlet operating at less than full rate, so it's base rate can transfer to this hoperlet
+                gd_max_rates(i_hopper_number, i_hopperlet_number) = gd_base_rates(i_hopper_number, i_hopperlet_number) + gd_max_rates(i_hopper_number, i_hopperlet_number - i_feeding_direction) - gd_outfeed_rates(i_hopper_number, i_hopperlet_number - i_feeding_direction) / 3.6 'account for upstream hopperlet operating at less than full rate, so it's base rate can transfer to this hoperlet
             End If
                         
             'determine how many packets are to be fed
             '
-            d_outfeed = WorksheetFunction.Min(gd_max_rates(h, k), gi_hoplet_count(h, k) * gd_pkt_kg)
-            gd_tot_outfeed_rate(h) = gd_tot_outfeed_rate(h) + d_outfeed * 3.6
-            gd_feed_count(h, k) = gd_feed_count(h, k) + d_outfeed / gd_pkt_kg
-            If d_outfeed > 0 Then gd_outfeed_rates(h, k) = d_outfeed * 3.6 Else gd_outfeed_rates(h, k) = 0
-            d_outfeed_pkt = d_outfeed_pkt + gd_feed_count(h, k)
+            d_hopper_outfeed = WorksheetFunction.Min(gd_max_rates(i_hopper_number, i_hopperlet_number), gi_hoplet_count(i_hopper_number, i_hopperlet_number) * gd_pkt_kg)
+            gd_tot_outfeed_rate(i_hopper_number) = gd_tot_outfeed_rate(i_hopper_number) + d_hopper_outfeed * 3.6
+            gd_feed_count(i_hopper_number, i_hopperlet_number) = gd_feed_count(i_hopper_number, i_hopperlet_number) + d_hopper_outfeed / gd_pkt_kg
+            If d_hopper_outfeed > 0 Then gd_outfeed_rates(i_hopper_number, i_hopperlet_number) = d_hopper_outfeed * 3.6 Else gd_outfeed_rates(i_hopper_number, i_hopperlet_number) = 0
+            d_hopper_outfeed_pkt = d_hopper_outfeed_pkt + gd_feed_count(i_hopper_number, i_hopperlet_number)
             
             'update counters to next downstream hopperlet
             '
-            k = k + i_dir
+            i_hopperlet_number = i_hopperlet_number + i_feeding_direction
             n = n - 1
-        Wend
-        i_bottom_layer = gi_bottom_layer(4 * (h - 1) * gi_hoplet_len + 1, 4 * h * gi_hoplet_len)
-        While i_bottom_layer > 0 And Round(d_outfeed_pkt, 0) >= i_bottom_layer
+        Wend 'loop over all hopperlets
+		
+		
+		' count how many blocks on the bottom layer of the current hopper have material
+        i_hopper_bot_layer_mat_count = fnc_i_bot_layer_mat_count(4 * (i_hopper_number - 1) * gi_hoplet_len + 1, 4 * i_hopper_number * gi_hoplet_len)
+		
+		
+		'outload if: 	- we have material at the bottom of our hopper, and
+		'				- there's space in the hopper outload rate for the bottom layer of our hopper
+        While i_hopper_bot_layer_mat_count > 0 And Round(d_hopper_outfeed_pkt, 0) >= i_hopper_bot_layer_mat_count
+		
             'update packet counters
-            '
-            gd_outfeed_tally(h) = gd_outfeed_tally(h) + i_bottom_layer * gd_pkt_kg * 0.001
-            d_outfeed_pkt = d_outfeed_pkt - i_bottom_layer
-            For k = 1 To 4
-                i_bottom_layer = gi_bottom_layer((4 * (h - 1) + (k - 1)) * gi_hoplet_len + 1, (4 * (h - 1) + k) * gi_hoplet_len)
-                gd_feed_count(h, k) = gd_feed_count(h, k) - i_bottom_layer
-            Next k
+            gd_outfeed_tally(i_hopper_number) = gd_outfeed_tally(i_hopper_number) + i_hopper_bot_layer_mat_count * gd_pkt_kg * 0.001 	'(tonnes)
+            d_hopper_outfeed_pkt = d_hopper_outfeed_pkt - i_hopper_bot_layer_mat_count
+			
+			'loop over hopperlets, reduce their feeding capacity because we just took their bottom layer
+            For i_hopperlet_number = 1 To 4
+                i_hopperlet_bot_layer_mat_count = fnc_i_bot_layer_mat_count((4 * (i_hopper_number - 1) + (i_hopperlet_number - 1)) * gi_hoplet_len + 1, (4 * (i_hopper_number - 1) + i_hopperlet_number) * gi_hoplet_len)
+                gd_feed_count(i_hopper_number, i_hopperlet_number) = gd_feed_count(i_hopper_number, i_hopperlet_number) - i_hopperlet_bot_layer_mat_count
+            Next i_hopperlet_number
              
             'need to remove the bottom row and index the material towards the bottom of the hopperlet
-            '
-            For j = jMax To 2 Step -1
-                For i = 4 * (h - 1) * gi_hoplet_len + 1 To 4 * h * gi_hoplet_len
-                    HopperArray(i, j) = HopperArray(i, j - 1)
-                    RenderPacket i, j, gi_query_color(i, j - 1)
+			'loop over entire hopper
+            For j = jMax To 2 Step -1	'work vertically from bottom to top
+                For i = 4 * (i_hopper_number - 1) * gi_hoplet_len + 1 To 4 * i_hopper_number * gi_hoplet_len	'work horizontally over the range of the hopper
+                    HopperArray(i, j) = HopperArray(i, j - 1)		'shift everything vertically down one block (ie. falling material)
+                    RenderPacket i, j, gi_query_color(i, j - 1)		'update colours
                 Next i
             Next j
-            For i = 4 * (h - 1) * gi_hoplet_len + 1 To 4 * h * gi_hoplet_len
+			
+			'because we just moved everything down, there is now space along the entire top row of the hopper
+            For i = 4 * (i_hopper_number - 1) * gi_hoplet_len + 1 To 4 * i_hopper_number * gi_hoplet_len
                 HopperArray(i, 1) = False
                 RenderPacket i, 1, RGB(255, 255, 255)
             Next i
             
-            i_bottom_layer = gi_bottom_layer(4 * (h - 1) * gi_hoplet_len + 1, 4 * h * gi_hoplet_len)
+            i_hopper_bot_layer_mat_count = fnc_i_bot_layer_mat_count(4 * (i_hopper_number - 1) * gi_hoplet_len + 1, 4 * i_hopper_number * gi_hoplet_len)
         Wend
-    Next h
+    Next i_hopper_number
+	
 End Sub
 
-Private Function gi_bottom_layer(ai_start As Integer, ai_end As Integer) As Integer
+'-------------------------------------------------------------------------------
+'Function fnc_i_bot_layer_mat_count
+'-------------------------------------------------------------------------------
+'DESCRIPTION:
+'	Given a horizontal range of blocks from 'ai_hopplet_block_index_start' to 
+'	'ai_hopplet_block_index_end', return how many have material
+'
+'ARGUMENTS:
+'	ai_hopplet_block_index_start = Index of hopperlet horizontal starting block 
+'	(referred to hopper)
+'
+'	ai_hopplet_block_index_start = Index of hopperlet horizontal end block 
+'	(referred to hopper)
+'
+
+Private Function fnc_i_bot_layer_mat_count(ai_hopplet_block_index_start As Integer, ai_hopplet_block_index_end As Integer) As Integer
     Dim i As Integer
     
-    gi_bottom_layer = 0
-    For i = ai_start To ai_end
-        If HopperArray(i, jMax) Then gi_bottom_layer = gi_bottom_layer + 1
+    fnc_i_bot_layer_mat_count = 0
+	
+    For i = ai_hopplet_block_index_start To ai_hopplet_block_index_end
+		'count the number of blocks at the bottom of the hopperlet that have material
+        If HopperArray(i, jMax) Then fnc_i_bot_layer_mat_count = fnc_i_bot_layer_mat_count + 1
     Next i
+	
 End Function
