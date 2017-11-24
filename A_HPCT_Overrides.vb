@@ -187,6 +187,19 @@ Public Sub DrawHopperHPCT()
     
 End Sub
 
+'-------------------------------------------------------------------------------
+'Function RunOneSecondHPCT
+'-------------------------------------------------------------------------------
+'DESCRIPTION:
+'	Increments the entire dumpstation simulation by one second.
+'
+'ARGUMENTS:
+'	NONE
+'
+'NOTE: 
+'	Dumpstation geometry of 2 hoppers each having 4 hopperlets hardcoded in.
+'
+
 Sub RunOneSecondHPCT()
 
 Dim a As Integer
@@ -196,21 +209,23 @@ Dim i As Integer, i_train_pos As Integer, i_door As Integer, h As Integer
     gd_pkt_kg = Sheet1.Range("G96")     'mass of one material block
     Hopletend4 = HopLetEndHP(2, 4)      'this is just to trick dtgraph to account for 2 hoppers
     dtgraph
-    FeederHPCT
+    FeederHPCT	'update outloading data
     
     For h = 1 To 2
         gd_tot_infeed_rate(h) = 0
     Next h
     
     'scans grid above hopper and calls on particlefall
-    For a = 1 To 8 * gi_hoplet_len
+    For a = 1 To 8 * gi_hoplet_len 'total length of dumpstation HARDCODED in. 4 hopperlets x 2 hoppers
         i_train_pos = a - Offset      'NOTE: Offset pre-calculated in dtgraph subroutine
 
+		'SEE IF ANY LOADING OCCURS ANYWHERE ACROSS THE DUMPSTATION AT THIS TIME
         If Sheet4.Cells(timeInc + 3, a + 2).Value > 0 Then
+			'RECOVER WAGON DOOR NUMBER BASED OFF COLOUR
             For i = 1 To 4
                 If Sheet4.Cells(timeInc + 3, a + 2).Interior.Color = doorColors(i) Then
                     i_door = i
-                    Exit For
+                    Exit For 	'break once door found
                 End If
             Next i
         
@@ -225,13 +240,13 @@ Dim i As Integer, i_train_pos As Integer, i_door As Integer, h As Integer
     UpdateDashboard
 End Sub
 
-Function gi_get_h(i As Integer) As Integer
-    If i <= 4 * gi_hoplet_len Then gi_get_h = 1 Else gi_get_h = 2
+Function fnc_get_hopper_index(i As Integer) As Integer
+    If i <= 4 * gi_hoplet_len Then fnc_get_hopper_index = 1 Else fnc_get_hopper_index = 2
 End Function
 
-Function gi_get_k(i As Integer) As Integer
-        gi_get_k = WorksheetFunction.RoundDown((i - 1) / gi_hoplet_len, 0) + 1
-        If gi_get_k > 4 Then gi_get_k = gi_get_k - 4
+Function fnc_get_hopperlet_index(i As Integer) As Integer
+        fnc_get_hopperlet_index = WorksheetFunction.RoundDown((i - 1) / gi_hoplet_len, 0) + 1
+        If fnc_get_hopperlet_index > 4 Then fnc_get_hopperlet_index = fnc_get_hopperlet_index - 4
 End Function
 
 
@@ -382,6 +397,23 @@ Public Sub UpdateDashboard()
     s.Cells(i_rw + 14, i_lbl_cl) = Round(gd_hopper_tally(1) + gd_hopper_tally(2), 1) & " t"
 End Sub
 
+
+
+'-------------------------------------------------------------------------------
+'Function FeederHPCT
+'-------------------------------------------------------------------------------
+'DESCRIPTION:
+'	Outloading function drawing material from the hopper.
+'
+'ARGUMENTS:
+'	NONE
+'
+'NOTE: 
+'	At the moment this only lets the wagon dump into the first two hoplets! Hardcoded.
+'
+
+' At the moment this only lets the wagon dump into the first two hoplets! Hardcoded.
+
 Public Sub ParticleFallHPCT(ai_train_pos As Integer, ai_door As Integer)
     Dim i As Integer, j As Integer, h As Integer, k As Integer
     Dim b_falling As Boolean        'flag to indicate if particle is falling (False indicates the particle is rolling down the slope)
@@ -393,40 +425,38 @@ Public Sub ParticleFallHPCT(ai_train_pos As Integer, ai_door As Integer)
     i = ai_train_pos
     
     'check if hopper has topped out
-    '
     While HopperArray(i, 1)   'move to right into we find some room (this simulates plowing)
-        h = gi_get_h(i)
-        k = gi_get_k(i)
+        h = fnc_get_hopper_index(i)		'what hopper we're dumping into
+        k = fnc_get_hopperlet_index(i)	'what hopperlet we're dumping into
         gb_topout(h, k) = True
         i = i + 1
         If i > iMax Then End  'there is nowhere else to fit anymore product so it's all gone to shit
     Wend
-    '
-    'stats collection
-    '
-    h = gi_get_h(i)
-    gd_infeed_tally(h) = gd_infeed_tally(h) + gd_pkt_kg * 0.001
-    gd_tot_infeed_rate(h) = gd_tot_infeed_rate(h) + gd_pkt_kg * 3.6
     
-    Do While i >= 1 And i <= iMax And j < jMax
+    'stats collection
+    h = fnc_get_hopper_index(i)			'what hopper we're dumping into
+    gd_infeed_tally(h) = gd_infeed_tally(h) + gd_pkt_kg * 0.001 	'add in one more packet
+    gd_tot_infeed_rate(h) = gd_tot_infeed_rate(h) + gd_pkt_kg * 3.6	'as above
+    
+    Do While i >= 1 And i <= iMax And j < jMax 'we must stay in the dumpstation bounds
         If HopperArray(i, j + 1) Then
             'the particle has landed on product, need to determine if it sticks or falls down angle of repose
-            '
+            
             If b_falling Then
                 RenderPacket i, j, RGB(255, 255, 255)       'set last known position back to white
                 b_falling = False
             End If
             
             'check if there is are walls either side of this position
-            '
+			' At the moment this only lets the wagon dump into the first hoplet! Hardcoded. 
             If i Mod gi_hoplet_len = 1 Then         'wall to left
                 b_left_wall = i Mod (4 * gi_hoplet_len) = 1 Or j >= jMax - HopperWallHeight
+				'
             ElseIf i Mod gi_hoplet_len = 0 Then     'wall to right
                 b_right_wall = i Mod (4 * gi_hoplet_len) = 0 Or j >= jMax - HopperWallHeight
             End If
             
             'check if the block should fall to one side
-            '
             If Not b_right_wall And HopperArray(i, j + 1) And Not HopperArray(WorksheetFunction.Min(iMax, i + 1), j + 1) Then        'check whether to fall right
                 i = i + 1
                 j = j + 1
